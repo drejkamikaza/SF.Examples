@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.ServiceFabric.Services.Remoting.Client;
@@ -28,9 +29,17 @@ namespace SF.LibraryApi.Controllers
         [HttpPost]
         public async Task Post([FromBody]string value)
         {
-            ILibraryService client = ServiceProxy.Create<ILibraryService>(new Uri("fabric:/SF.Example/SF.Library"));
-
-            Guid Id = await client.AddBookAsync(new Book { Author = "test", Title = "test Title", Year = DateTime.Now.Year });
+            try
+            {
+                Microsoft.ServiceFabric.Services.Client.ServicePartitionKey partitionKey = new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(1);
+                ILibraryService client = ServiceProxy.Create<ILibraryService>(new Uri("fabric:/SF.Examples/SF.Library"), partitionKey);
+                Guid Id = await client.AddBookAsync(new Book { Id = Guid.NewGuid(), Author = $"test {DateTime.Now.Ticks}", Title = $"test Title {DateTime.Now.Ticks}", Year = DateTime.Now.Year }, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                ServiceEventSource.Current.Message(ex.ToString());
+                throw ex;
+            }
         }
 
         // PUT api/values/5

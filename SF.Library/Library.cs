@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Fabric;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.ServiceFabric.Data;
 using Microsoft.ServiceFabric.Data.Collections;
 using Microsoft.ServiceFabric.Services.Communication.Runtime;
 using Microsoft.ServiceFabric.Services.Remoting.Runtime;
 using Microsoft.ServiceFabric.Services.Runtime;
+using Newtonsoft.Json;
 using SF.Library.Contracts;
 
 namespace SF.Library
@@ -16,6 +18,10 @@ namespace SF.Library
     /// </summary>
     internal sealed class Library : StatefulService, ILibraryService
     {
+        private const string ADD_QUEUE = "AddNewBookQueue";
+        private const string BOOK_STORE = "Libary Book store";
+        private const int TIME_OUT = 5;
+
         public Library(StatefulServiceContext context)
             : base(context)
         { }
@@ -25,32 +31,72 @@ namespace SF.Library
             return this.CreateServiceRemotingReplicaListeners();
         }
 
-        public async Task<Guid> AddBookAsync(Book bookToAdd)
+        public async Task<Guid> AddBookAsync(Book bookToAdd, CancellationToken cancellationToken)
         {
             ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(AddBookAsync)} called");
 
-            var myDictionary = await this.StateManager.GetOrAddAsync<IReliableDictionary<string, long>>("myDictionary");
+            var addQueue = await StateManager.GetOrAddAsync<IReliableConcurrentQueue<Book>>(ADD_QUEUE);
 
             using (var tx = this.StateManager.CreateTransaction())
             {
-                var result = await myDictionary.TryGetValueAsync(tx, "Counter");
-                await myDictionary.AddOrUpdateAsync(tx, "Counter", 0, (key, value) => value = value + 10);
+                bookToAdd.Id = Guid.NewGuid();
+                await addQueue.EnqueueAsync(tx, bookToAdd, cancellationToken);
+                ServiceEventSource.Current.ServiceMessage(this.Context, $"Object {nameof(bookToAdd)} scheduled for add to queue");
+
                 await tx.CommitAsync();
             }
 
             ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(AddBookAsync)} finished");
 
-            return Guid.NewGuid();
+            return bookToAdd.Id;
         }
 
-        public Task<Book> GetBookAsync(Guid id)
+        public async Task<Book> GetBookAsync(Guid id, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            using (var tx = this.StateManager.CreateTransaction())
+            {
+                var dictionary = await this.StateManager.GetOrAddAsync<IReliableDictionary<Guid, Book>>(tx, BOOK_STORE);
+                if (dictionary == null)
+                    return null;
+
+                bool exists = await dictionary.ContainsKeyAsync(tx, id, TimeSpan.FromSeconds(TIME_OUT), cancellationToken);
+                if (!exists)
+                    return null;
+
+                var bookConditionValue = await dictionary.TryGetValueAsync(tx, id, TimeSpan.FromSeconds(TIME_OUT), cancellationToken);
+                if (!bookConditionValue.HasValue)
+                    return null;
+
+                return bookConditionValue.Value;
+            }
         }
 
-        public Task<List<Book>> SearchLibraryAsync(BookSearch searchParameters)
+        public async Task<List<Book>> SearchLibraryAsync(BookSearch searchParameters, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            List<Book> result = null;
+
+            using (var tx = this.StateManager.CreateTransaction())
+            {
+                var dictionary = await this.StateManager.GetOrAddAsync<IReliableDictionary<Guid, Book>>(tx, BOOK_STORE);
+                if (dictionary == null)
+                    return null;
+
+                IAsyncEnumerable<KeyValuePair<Guid, Book>> enumerableCollection = await dictionary.CreateEnumerableAsync(tx);
+                if (enumerableCollection == null)
+                    return null;
+
+                var enumerator = enumerableCollection.GetAsyncEnumerator();
+                enumerator.Reset();
+
+                result = new List<Book>();
+                while (await enumerator.MoveNextAsync(cancellationToken))
+                {
+                    if (enumerator.Current.Value != null)
+                        result.Add(enumerator.Current.Value);
+                }
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -60,30 +106,33 @@ namespace SF.Library
         /// <returns></returns>
         protected override async Task RunAsync(CancellationToken cancellationToken)
         {
-            // TODO: Replace the following sample code with your own logic 
-            //       or remove this RunAsync override if it's not needed in your service.
-
-            var myDictionary = await this.StateManager.GetOrAddAsync<IReliableDictionary<string, long>>("myDictionary");
-
-            while (true)
+            var addQueueExists = await this.StateManager.TryGetAsync<IReliableConcurrentQueue<Book>>(ADD_QUEUE);
+            if (!addQueueExists.HasValue)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                ServiceEventSource.Current.Message($"Queue {ADD_QUEUE} does not exist");
+                return;
+            }
 
+            IReliableConcurrentQueue<Book> addQueue = addQueueExists.Value;
+            while (!cancellationToken.IsCancellationRequested)
+            {
                 using (var tx = this.StateManager.CreateTransaction())
                 {
-                    var result = await myDictionary.TryGetValueAsync(tx, "Counter");
+                    var bookToAddExist = await addQueue.TryDequeueAsync(tx, cancellationToken);
+                    if (!bookToAddExist.HasValue)
+                        continue;
 
-                    ServiceEventSource.Current.ServiceMessage(this.Context, "Current Counter Value: {0}",
-                        result.HasValue ? result.Value.ToString() : "Value does not exist.");
+                    Book bookToAdd = bookToAddExist.Value;
 
-                    await myDictionary.AddOrUpdateAsync(tx, "Counter", 0, (key, value) => ++value);
+                    var dictionary = await this.StateManager.GetOrAddAsync<IReliableDictionary<Guid, Book>>(tx, BOOK_STORE);
+                    await dictionary.AddOrUpdateAsync(tx, bookToAdd.Id, bookToAdd, (key, value) => value);
 
-                    // If an exception is thrown before calling CommitAsync, the transaction aborts, all changes are 
-                    // discarded, and nothing is saved to the secondary replicas.
+                    ServiceEventSource.Current.Message($"Added new book to the collection {nameof(Book)} - {JsonConvert.SerializeObject(bookToAdd)}");
+
                     await tx.CommitAsync();
                 }
 
-                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(TIME_OUT), cancellationToken);
             }
         }
     }

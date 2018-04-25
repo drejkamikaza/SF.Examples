@@ -31,19 +31,42 @@ namespace SF.Library
             return this.CreateServiceRemotingReplicaListeners();
         }
 
+        private async Task<IReliableDictionary<Guid, Book>> GetDictionaryAsync()
+        {
+            IReliableDictionary<Guid, Book> dict = null;
+            using (var tx = this.StateManager.CreateTransaction())
+            {
+                dict = await this.StateManager.GetOrAddAsync<IReliableDictionary<Guid, Book>>(tx, BOOK_STORE);
+                await tx.CommitAsync();
+            }
+
+            return dict;
+        }
+
         public async Task<Guid> AddBookAsync(Book bookToAdd, CancellationToken cancellationToken)
         {
             ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(AddBookAsync)} called");
 
-            var addQueue = await StateManager.GetOrAddAsync<IReliableConcurrentQueue<Book>>(ADD_QUEUE);
+            if (bookToAdd == null)
+                return Guid.Empty;
 
-            using (var tx = this.StateManager.CreateTransaction())
+            try
             {
-                bookToAdd.Id = Guid.NewGuid();
-                await addQueue.EnqueueAsync(tx, bookToAdd, cancellationToken);
-                ServiceEventSource.Current.ServiceMessage(this.Context, $"Object {nameof(bookToAdd)} scheduled for add to queue");
+                IReliableDictionary<Guid, Book> books = await GetDictionaryAsync();
 
-                await tx.CommitAsync();
+                using (var tx = this.StateManager.CreateTransaction())
+                {
+                    await books.AddOrUpdateAsync(tx, bookToAdd.Id, bookToAdd, (key, value) => value);
+
+                    ServiceEventSource.Current.Message($"Added new book to the collection {nameof(Book)} - {JsonConvert.SerializeObject(bookToAdd)}");
+
+                    await tx.CommitAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                ServiceEventSource.Current.Message(ex.ToString());
+                throw;
             }
 
             ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(AddBookAsync)} finished");
@@ -75,65 +98,35 @@ namespace SF.Library
         {
             List<Book> result = null;
 
-            using (var tx = this.StateManager.CreateTransaction())
-            {
-                var dictionary = await this.StateManager.GetOrAddAsync<IReliableDictionary<Guid, Book>>(tx, BOOK_STORE);
-                if (dictionary == null)
-                    return null;
+            var dictionary = await GetDictionaryAsync();
+            if (dictionary == null)
+                return null;
 
-                IAsyncEnumerable<KeyValuePair<Guid, Book>> enumerableCollection = await dictionary.CreateEnumerableAsync(tx);
-                if (enumerableCollection == null)
-                    return null;
-
-                var enumerator = enumerableCollection.GetAsyncEnumerator();
-                enumerator.Reset();
-
-                result = new List<Book>();
-                while (await enumerator.MoveNextAsync(cancellationToken))
-                {
-                    if (enumerator.Current.Value != null)
-                        result.Add(enumerator.Current.Value);
-                }
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Processing Adds to Library
-        /// </summary>
-        /// <param name="cancellationToken"></param>
-        /// <returns></returns>
-        protected override async Task RunAsync(CancellationToken cancellationToken)
-        {
-            var addQueueExists = await this.StateManager.TryGetAsync<IReliableConcurrentQueue<Book>>(ADD_QUEUE);
-            if (!addQueueExists.HasValue)
-            {
-                ServiceEventSource.Current.Message($"Queue {ADD_QUEUE} does not exist");
-                return;
-            }
-
-            IReliableConcurrentQueue<Book> addQueue = addQueueExists.Value;
-            while (!cancellationToken.IsCancellationRequested)
+            try
             {
                 using (var tx = this.StateManager.CreateTransaction())
                 {
-                    var bookToAddExist = await addQueue.TryDequeueAsync(tx, cancellationToken);
-                    if (!bookToAddExist.HasValue)
-                        continue;
+                    IAsyncEnumerable<KeyValuePair<Guid, Book>> enumerableCollection = await dictionary.CreateEnumerableAsync(tx);
+                    if (enumerableCollection == null)
+                        return null;
 
-                    Book bookToAdd = bookToAddExist.Value;
+                    var enumerator = enumerableCollection.GetAsyncEnumerator();
 
-                    var dictionary = await this.StateManager.GetOrAddAsync<IReliableDictionary<Guid, Book>>(tx, BOOK_STORE);
-                    await dictionary.AddOrUpdateAsync(tx, bookToAdd.Id, bookToAdd, (key, value) => value);
-
-                    ServiceEventSource.Current.Message($"Added new book to the collection {nameof(Book)} - {JsonConvert.SerializeObject(bookToAdd)}");
-
-                    await tx.CommitAsync();
+                    result = new List<Book>();
+                    while (await enumerator.MoveNextAsync(cancellationToken))
+                    {
+                        if (enumerator.Current.Value != null)
+                            result.Add(enumerator.Current.Value);
+                    }
                 }
-
-                await Task.Delay(TimeSpan.FromSeconds(TIME_OUT), cancellationToken);
             }
+            catch (Exception ex)
+            {
+                ServiceEventSource.Current.Message(ex.ToString());
+                throw;
+            }
+
+            return result;
         }
     }
 }

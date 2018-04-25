@@ -13,9 +13,23 @@ namespace SF.LibraryApi.Controllers
     {
         // GET api/values
         [HttpGet]
-        public IEnumerable<string> Get()
+        public async Task<IEnumerable<Book>> Get()
         {
-            return new string[] { "value1", "value2" };
+            List<Book> result = null;
+
+            try
+            {
+                Microsoft.ServiceFabric.Services.Client.ServicePartitionKey partitionKey = new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(1);
+                ILibraryService client = ServiceProxy.Create<ILibraryService>(new Uri("fabric:/SF.Examples/SF.Library"), partitionKey);
+                result = await client.SearchLibraryAsync(new BookSearch(), CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                ServiceEventSource.Current.Message(ex.ToString());
+                throw ex;
+            }
+
+            return result;
         }
 
         // GET api/values/5

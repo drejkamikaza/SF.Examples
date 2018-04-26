@@ -11,7 +11,6 @@ namespace SF.LibraryApi.Controllers
     [Route("api/[controller]")]
     public class ValuesController : Controller
     {
-        // GET api/values
         [HttpGet]
         public async Task<IEnumerable<Book>> Get()
         {
@@ -32,14 +31,26 @@ namespace SF.LibraryApi.Controllers
             return result;
         }
 
-        // GET api/values/5
         [HttpGet("{id}")]
-        public string Get(int id)
+        public async Task<Book> Get(Guid id)
         {
-            return "value";
+            Book result = null;
+
+            try
+            {
+                Microsoft.ServiceFabric.Services.Client.ServicePartitionKey partitionKey = new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(1);
+                ILibraryService client = ServiceProxy.Create<ILibraryService>(new Uri("fabric:/SF.Examples/SF.Library"), partitionKey);
+                result = await client.GetBookAsync(id, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                ServiceEventSource.Current.Message(ex.ToString());
+                throw ex;
+            }
+
+            return result;
         }
 
-        // POST api/values
         [HttpPost]
         public async Task Post([FromBody]string value)
         {
@@ -56,13 +67,11 @@ namespace SF.LibraryApi.Controllers
             }
         }
 
-        // PUT api/values/5
         [HttpPut("{id}")]
         public void Put(int id, [FromBody]string value)
         {
         }
 
-        // DELETE api/values/5
         [HttpDelete("{id}")]
         public void Delete(int id)
         {

@@ -76,6 +76,8 @@ namespace SF.Library
 
         public async Task<Book> GetBookAsync(Guid id, CancellationToken cancellationToken)
         {
+            ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(GetBookAsync)} called");
+
             using (var tx = this.StateManager.CreateTransaction())
             {
                 var dictionary = await this.StateManager.GetOrAddAsync<IReliableDictionary<Guid, Book>>(tx, BOOK_STORE);
@@ -90,12 +92,16 @@ namespace SF.Library
                 if (!bookConditionValue.HasValue)
                     return null;
 
+                ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(GetBookAsync)} finished");
+
                 return bookConditionValue.Value;
             }
         }
 
         public async Task<List<Book>> SearchLibraryAsync(BookSearch searchParameters, CancellationToken cancellationToken)
         {
+            ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(SearchLibraryAsync)} called");
+
             List<Book> result = null;
 
             var dictionary = await GetDictionaryAsync();
@@ -125,6 +131,8 @@ namespace SF.Library
                 ServiceEventSource.Current.Message(ex.ToString());
                 throw;
             }
+
+            ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(SearchLibraryAsync)} finished");
 
             return result;
         }

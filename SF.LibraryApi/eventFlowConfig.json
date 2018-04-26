@@ -1,0 +1,38 @@
+﻿{
+  "inputs": [
+    {
+      "type": "EventSource",
+      "sources": [
+        {
+          "providerName": "SF.Examples-SF.LibraryApi",
+          "level": "LogAlways"
+        }
+      ]
+    },
+    {
+      "type": "ETW",
+      "providers": [
+        {
+          "providerName": "SF.Examples-SF.LibraryApi",
+          "level": "LogAlways"
+        }
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "type": "ApplicationInsights",
+      "instrumentationKey": "31508a96-7f5b-4f1b-9e90-2dd657718c44"
+    },
+    {
+      "type": "ElasticSearch",
+      "indexNamePrefix": "SF.Examples",
+      "serviceUri": "http://localhost:9200",
+      "eventDocumentTypeName": "doc",
+      "numberOfShards": 1,
+      "numberOfReplicas": 1,
+      "refreshInterval": "15s"
+    }
+  ],
+  "schemaVersion": "2018-04-26"
+}

@@ -16,6 +16,8 @@ namespace SF.LibraryApi.Controllers
         {
             List<Book> result = null;
 
+            ServiceEventSource.Current.Message("Started GET ALL");
+
             try
             {
                 Microsoft.ServiceFabric.Services.Client.ServicePartitionKey partitionKey = new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(1);
@@ -28,12 +30,16 @@ namespace SF.LibraryApi.Controllers
                 throw ex;
             }
 
+            ServiceEventSource.Current.Message("Finished GET ALL");
+
             return result;
         }
 
         [HttpGet("{id}")]
         public async Task<Book> Get(Guid id)
         {
+            ServiceEventSource.Current.Message("Started GET ONE");
+
             Book result = null;
 
             try
@@ -48,12 +54,16 @@ namespace SF.LibraryApi.Controllers
                 throw ex;
             }
 
+            ServiceEventSource.Current.Message("Finished GET ONE");
+
             return result;
         }
 
         [HttpPost]
         public async Task Post([FromBody]string value)
         {
+            ServiceEventSource.Current.Message("Started ADD NEW");
+
             try
             {
                 Microsoft.ServiceFabric.Services.Client.ServicePartitionKey partitionKey = new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(1);
@@ -65,6 +75,8 @@ namespace SF.LibraryApi.Controllers
                 ServiceEventSource.Current.Message(ex.ToString());
                 throw ex;
             }
+
+            ServiceEventSource.Current.Message("Finished ADD NEW");
         }
 
         [HttpPut("{id}")]

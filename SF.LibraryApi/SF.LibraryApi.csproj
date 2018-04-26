@@ -29,4 +29,10 @@
     <ProjectReference Include="..\SF.Library.Contracts\SF.Library.Contracts.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="eventFlowConfig.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

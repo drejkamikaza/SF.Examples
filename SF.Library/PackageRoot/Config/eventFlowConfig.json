@@ -1,0 +1,24 @@
+﻿{
+  "inputs": [
+    {
+      "type": "EventSource",
+      "sources": [
+        { "providerName": "SF.Examples-SF.Library" },
+        { "providerName": "Microsoft-ServiceFabric-Actors" },
+        { "providerName": "Microsoft-ServiceFabric-Services" }
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "type": "ElasticSearch",
+      "indexNamePrefix": "SF.Examples",
+      "serviceUri": "http://localhost:9200",
+      "eventDocumentTypeName": "doc",
+      "numberOfShards": 1,
+      "numberOfReplicas": 1,
+      "refreshInterval": "15s"
+    }
+  ],
+  "schemaVersion": "2018-04-27"
+}

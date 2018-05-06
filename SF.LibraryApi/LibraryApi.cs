@@ -1,11 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Fabric;
 using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Diagnostics.EventFlow;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.ServiceFabric.Services.Communication.AspNetCore;
 using Microsoft.ServiceFabric.Services.Communication.Runtime;
@@ -18,9 +15,13 @@ namespace SF.LibraryApi
     /// </summary>
     internal sealed class LibraryApi : StatelessService
     {
-        public LibraryApi(StatelessServiceContext context)
+        private readonly DiagnosticPipeline _diagnosticPipeline;
+
+        public LibraryApi(StatelessServiceContext context, DiagnosticPipeline diagnosticPipeline)
             : base(context)
-        { }
+        {
+            _diagnosticPipeline = diagnosticPipeline;
+        }
 
         /// <summary>
         /// Optional override to create listeners (like tcp, http) for this service instance.
@@ -39,7 +40,8 @@ namespace SF.LibraryApi
                                     .UseKestrel()
                                     .ConfigureServices(
                                         services => services
-                                            .AddSingleton<StatelessServiceContext>(serviceContext))
+                                            .AddSingleton<StatelessServiceContext>(serviceContext)
+                                            .AddSingleton<DiagnosticPipeline>(_diagnosticPipeline))
                                     .UseContentRoot(Directory.GetCurrentDirectory())
                                     .UseStartup<Startup>()
                                     .UseServiceFabricIntegration(listener, ServiceFabricIntegrationOptions.None)

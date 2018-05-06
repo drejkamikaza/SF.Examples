@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Threading;
+using Microsoft.Diagnostics.EventFlow;
+using Microsoft.Diagnostics.EventFlow.ServiceFabric;
 using Microsoft.ServiceFabric.Services.Runtime;
 
 namespace SF.LibraryApi
@@ -14,18 +16,16 @@ namespace SF.LibraryApi
         {
             try
             {
-                // The ServiceManifest.XML file defines one or more service type names.
-                // Registering a service maps a service type name to a .NET type.
-                // When Service Fabric creates an instance of this service type,
-                // an instance of the class is created in this host process.
+                using (DiagnosticPipeline pipeline = ServiceFabricDiagnosticPipelineFactory.CreatePipeline("SFExamples-DiagnosticPipeline"))
+                {
+                    ServiceRuntime.RegisterServiceAsync("SF.LibraryApiType",
+                        context => new LibraryApi(context, pipeline)).GetAwaiter().GetResult();
 
-                ServiceRuntime.RegisterServiceAsync("SF.LibraryApiType",
-                    context => new LibraryApi(context)).GetAwaiter().GetResult();
+                    ServiceEventSource.Current.ServiceTypeRegistered(Process.GetCurrentProcess().Id, typeof(LibraryApi).Name);
 
-                ServiceEventSource.Current.ServiceTypeRegistered(Process.GetCurrentProcess().Id, typeof(LibraryApi).Name);
-
-                // Prevents this host process from terminating so services keeps running. 
-                Thread.Sleep(Timeout.Infinite);
+                    // Prevents this host process from terminating so services keeps running. 
+                    Thread.Sleep(Timeout.Infinite);
+                }
             }
             catch (Exception e)
             {

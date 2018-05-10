@@ -10,10 +10,12 @@ namespace SF.Library.Contracts
 {
     public interface ILibraryService : IService
     {
-        Task<Guid> AddBookAsync(Book bookToAdd, CancellationToken cancellationToken);
+        Task<Guid> AddOrUpdateBookAsync(Book bookToAdd, CancellationToken cancellationToken);
 
         Task<Book> GetBookAsync(Guid id, CancellationToken cancellationToken);
 
         Task<List<Book>> SearchLibraryAsync(BookSearch searchParameters, CancellationToken cancellationToken);
+
+        Task<bool> RemoveBookAsync(Guid id, CancellationToken none);
     }
 }

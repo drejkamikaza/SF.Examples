@@ -43,11 +43,11 @@ namespace SF.Library
             return dict;
         }
 
-        public async Task<Guid> AddBookAsync(Book bookToAdd, CancellationToken cancellationToken)
+        public async Task<Guid> AddOrUpdateBookAsync(Book book, CancellationToken cancellationToken)
         {
-            ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(AddBookAsync)} called");
+            ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(AddOrUpdateBookAsync)} called");
 
-            if (bookToAdd == null)
+            if (book == null)
                 return Guid.Empty;
 
             try
@@ -56,9 +56,9 @@ namespace SF.Library
 
                 using (var tx = this.StateManager.CreateTransaction())
                 {
-                    await books.AddOrUpdateAsync(tx, bookToAdd.Id, bookToAdd, (key, value) => value);
+                    await books.AddOrUpdateAsync(tx, book.Id, book, (key, value) => value);
 
-                    ServiceEventSource.Current.Message($"Added new book to the collection {nameof(Book)} - {JsonConvert.SerializeObject(bookToAdd)}");
+                    ServiceEventSource.Current.Message($"Added new book to the collection {nameof(Book)} - {JsonConvert.SerializeObject(book)}");
 
                     await tx.CommitAsync();
                 }
@@ -69,9 +69,9 @@ namespace SF.Library
                 throw;
             }
 
-            ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(AddBookAsync)} finished");
+            ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(AddOrUpdateBookAsync)} finished");
 
-            return bookToAdd.Id;
+            return book.Id;
         }
 
         public async Task<Book> GetBookAsync(Guid id, CancellationToken cancellationToken)
@@ -133,6 +133,35 @@ namespace SF.Library
             }
 
             ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(SearchLibraryAsync)} finished");
+
+            return result;
+        }
+
+        public async Task<bool> RemoveBookAsync(Guid id, CancellationToken none)
+        {
+            ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(RemoveBookAsync)} called");
+
+            bool result = false;
+
+            var dictionary = await GetDictionaryAsync();
+            if (dictionary == null)
+                return result;
+
+            try
+            {
+                using (var tx = this.StateManager.CreateTransaction())
+                {
+                    var conditionalValue = await dictionary.TryRemoveAsync(tx, id);
+                    result = conditionalValue.HasValue && conditionalValue.Value != null;
+                }
+            }
+            catch (Exception ex)
+            {
+                ServiceEventSource.Current.Message(ex.ToString());
+                throw;
+            }
+
+            ServiceEventSource.Current.ServiceMessage(this.Context, $"Method {nameof(RemoveBookAsync)} finished");
 
             return result;
         }

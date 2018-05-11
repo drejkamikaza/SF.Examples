@@ -30,7 +30,7 @@ namespace SF.LibraryApi.Controllers
             try
             {
                 var books = await _libraryService.Value.SearchLibraryAsync(new BookSearch(), CancellationToken.None);
-                if (books != null && books.Any())
+                if (books == null || !books.Any())
                     return new List<BookModel>();
 
                 result = new List<BookModel>();
